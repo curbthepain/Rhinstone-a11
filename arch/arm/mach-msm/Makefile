@@ -453,6 +453,7 @@ obj-$(CONFIG_MSM_DEVFREQ_CPUBW) += devfreq_cpubw.o
 
 obj-$(CONFIG_WALL_CLK) += wallclk.o
 obj-$(CONFIG_WALL_CLK_SYSFS) += wallclk_sysfs.o
+obj-$(CONFIG_HAS_MACH_MEMUTILS) += memutils/
 
 obj-y += display/
 obj-$(CONFIG_ARCH_DUMMY) += board-htc-8974.o htc_acoustic_alsa.o
