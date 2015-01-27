@@ -3,6 +3,7 @@
 # fix for build system bug...
 obj-$(CONFIG_STAGING)		+= staging.o
 
+obj-y				+= prima/
 obj-y				+= serial/
 obj-y				+= media/
 obj-$(CONFIG_ET131X)		+= et131x/
