@@ -36,7 +36,6 @@
 #include <linux/mfd/pm8xxx/misc.h>
 #include <linux/qpnp/qpnp-adc.h>
 
-#include <mach/board.h>
 #include <mach/msm_smd.h>
 #include <mach/msm_iomap.h>
 #include <mach/subsystem_restart.h>
@@ -129,10 +128,10 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define WCNSS_TSTBUS_CTRL_WRFIFO	(0x04 << 1)
 #define WCNSS_TSTBUS_CTRL_RDFIFO	(0x05 << 1)
 #define WCNSS_TSTBUS_CTRL_CTRL		(0x07 << 1)
-#define WCNSS_TSTBUS_CTRL_AXIM_CFG0	(0x00 << 8)
-#define WCNSS_TSTBUS_CTRL_AXIM_CFG1	(0x01 << 8)
-#define WCNSS_TSTBUS_CTRL_CTRL_CFG0	(0x00 << 28)
-#define WCNSS_TSTBUS_CTRL_CTRL_CFG1	(0x01 << 28)
+#define WCNSS_TSTBUS_CTRL_AXIM_CFG0	(0x00 << 6)
+#define WCNSS_TSTBUS_CTRL_AXIM_CFG1	(0x01 << 6)
+#define WCNSS_TSTBUS_CTRL_CTRL_CFG0	(0x00 << 12)
+#define WCNSS_TSTBUS_CTRL_CTRL_CFG1	(0x01 << 12)
 
 #define MSM_PRONTO_CCPU_BASE			0xfb205050
 #define CCU_PRONTO_INVALID_ADDR_OFFSET		0x08
@@ -164,6 +163,14 @@ static DEFINE_SPINLOCK(reg_spinlock);
 #define WCNSS_MAX_CMD_LEN		(128)
 #define WCNSS_MIN_CMD_LEN		(3)
 #define WCNSS_MIN_SERIAL_LEN		(6)
+
+/* control messages from userspace */
+#define WCNSS_USR_CTRL_MSG_START  0x00000000
+#define WCNSS_USR_SERIAL_NUM      (WCNSS_USR_CTRL_MSG_START + 1)
+#define WCNSS_USR_HAS_CAL_DATA    (WCNSS_USR_CTRL_MSG_START + 2)
+#define WCNSS_USR_WLAN_MAC_ADDR   (WCNSS_USR_CTRL_MSG_START + 3)
+
+#define MAC_ADDRESS_STR "%02x:%02x:%02x:%02x:%02x:%02x"
 
 #define WCNSS_USR_CTRL_MSG_START  0x00000000
 #define WCNSS_USR_SERIAL_NUM      (WCNSS_USR_CTRL_MSG_START + 1)
@@ -319,6 +326,7 @@ static struct {
 	int	device_opened;
 	int	iris_xo_mode_set;
 	int	fw_vbatt_state;
+	char	wlan_nv_macAddr[WLAN_MAC_ADDR_SIZE];
 	int	ctrl_device_opened;
 	struct mutex dev_lock;
 	struct mutex ctrl_lock;
@@ -326,7 +334,52 @@ static struct {
 	struct qpnp_adc_tm_btm_param vbat_monitor_params;
 	struct qpnp_adc_tm_chip *adc_tm_dev;
 	struct mutex vbat_monitor_mutex;
+
 } *penv = NULL;
+
+static ssize_t wcnss_wlan_macaddr_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	char macAddr[WLAN_MAC_ADDR_SIZE];
+
+	if (!penv)
+		return -ENODEV;
+
+	pr_debug("%s: Receive MAC Addr From user space: %s\n", __func__, buf);
+
+	if (WLAN_MAC_ADDR_SIZE != sscanf(buf, MAC_ADDRESS_STR,
+		 (int *)&macAddr[0], (int *)&macAddr[1],
+		 (int *)&macAddr[2], (int *)&macAddr[3],
+		 (int *)&macAddr[4], (int *)&macAddr[5])) {
+
+		pr_err("%s: Failed to Copy MAC\n", __func__);
+		return -EINVAL;
+	}
+
+	memcpy(penv->wlan_nv_macAddr, macAddr, sizeof(penv->wlan_nv_macAddr));
+
+	pr_info("%s: Write MAC Addr:" MAC_ADDRESS_STR "\n", __func__,
+		penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
+		penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
+		penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
+
+	return count;
+}
+
+static ssize_t wcnss_wlan_macaddr_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	if (!penv)
+		return -ENODEV;
+
+	return scnprintf(buf, PAGE_SIZE, MAC_ADDRESS_STR,
+		penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
+		penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
+		penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
+}
+
+static DEVICE_ATTR(wcnss_mac_addr, S_IRUSR | S_IWUSR,
+	wcnss_wlan_macaddr_show, wcnss_wlan_macaddr_store);
 
 static ssize_t wcnss_serial_number_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
@@ -630,22 +683,6 @@ void wcnss_pronto_log_debug_regs(void)
 EXPORT_SYMBOL(wcnss_pronto_log_debug_regs);
 
 #ifdef CONFIG_WCNSS_REGISTER_DUMP_ON_BITE
-static void wcnss_log_iris_regs(void)
-{
-	int i;
-	u32 reg_val;
-	u32 regs_array[] = {
-		0x04, 0x05, 0x11, 0x1e, 0x40, 0x48,
-		0x49, 0x4b, 0x00, 0x01, 0x4d};
-
-	pr_info("IRIS Registers [address] : value\n");
-
-	for (i = 0; i < ARRAY_SIZE(regs_array); i++) {
-		reg_val = wcnss_rf_read_reg(regs_array[i]);
-		pr_info("[0x%08x] : 0x%08x\n", regs_array[i], reg_val);
-	}
-}
-
 void wcnss_log_debug_regs_on_bite(void)
 {
 	struct platform_device *pdev = wcnss_get_platform_device();
@@ -664,16 +701,11 @@ void wcnss_log_debug_regs_on_bite(void)
 		clk_rate = clk_get_rate(measure);
 		pr_debug("wcnss: clock frequency is: %luHz\n", clk_rate);
 
-		if (clk_rate) {
+		if (clk_rate)
 			wcnss_pronto_log_debug_regs();
-		} else {
+		else
 			pr_err("clock frequency is zero, cannot access PMU or other registers\n");
-			wcnss_log_iris_regs();
-		}
 	}
-    else{
-        pr_err("Can't access measure or wcnss_debug\n");
-    }
 }
 #endif
 
@@ -743,14 +775,12 @@ static void wcnss_smd_notify_event(void *data, unsigned int event)
 			pr_err("wcnss: failed to read from smd %d\n", len);
 			return;
 		}
-		printk("wcnss_debug: wcnss_smd_notify_event() : Start to schedule wcnssctrl_rx_work to read smd packet \r\n");
 		schedule_work(&penv->wcnssctrl_rx_work);
 		break;
 
 	case SMD_EVENT_OPEN:
 		pr_debug("wcnss: opening WCNSS SMD channel :%s",
 				WCNSS_CTRL_CHANNEL);
-		printk("wcnss_debug: opening WCNSS SMD channel :%s", WCNSS_CTRL_CHANNEL);
 		schedule_work(&penv->wcnssctrl_version_work);
 
 		break;
@@ -957,7 +987,6 @@ EXPORT_SYMBOL(wcnss_get_wlan_config);
 
 int wcnss_device_ready(void)
 {
-	printk("wcnss_debug : wcnss_device_ready(): penv->nv_downloaded = 0x%x\r\n", penv->nv_downloaded);
 	if (penv && penv->pdev && penv->nv_downloaded)
 		return 1;
 	return 0;
@@ -1037,6 +1066,21 @@ unsigned int wcnss_get_serial_number(void)
 	return 0;
 }
 EXPORT_SYMBOL(wcnss_get_serial_number);
+
+
+int wcnss_get_wlan_mac_address(char mac_addr[WLAN_MAC_ADDR_SIZE])
+{
+	if (!penv)
+		return -ENODEV;
+
+	memcpy(mac_addr, penv->wlan_nv_macAddr, WLAN_MAC_ADDR_SIZE);
+	pr_debug("%s: Get MAC Addr:" MAC_ADDRESS_STR "\n", __func__,
+		penv->wlan_nv_macAddr[0], penv->wlan_nv_macAddr[1],
+		penv->wlan_nv_macAddr[2], penv->wlan_nv_macAddr[3],
+		penv->wlan_nv_macAddr[4], penv->wlan_nv_macAddr[5]);
+	return 0;
+}
+EXPORT_SYMBOL(wcnss_get_wlan_mac_address);
 
 static int enable_wcnss_suspend_notify;
 
@@ -1189,7 +1233,6 @@ static int wcnss_smd_tx(void *data, int len)
 		pr_err("wcnss: failed to write Command %d", len);
 		ret = -ENODEV;
 	}
-	printk("wcnss_debug: wcnss_smd_tx() finish and exit \r\n");
 	return ret;
 }
 
