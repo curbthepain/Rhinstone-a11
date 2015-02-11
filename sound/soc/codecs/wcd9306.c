@@ -3109,6 +3109,7 @@ static int tapan_volatile(struct snd_soc_codec *ssc, unsigned int reg)
 extern int snd_hax_reg_access(unsigned int);
 extern unsigned int snd_hax_cache_read(unsigned int);
 extern void snd_hax_cache_write(unsigned int, unsigned int);
+extern void apply_preset(int, int, int, int, int);
 #endif
 
 #ifndef CONFIG_SOUND_CONTROL_HAX_3_GPL
@@ -5862,6 +5863,11 @@ static int tapan_codec_probe(struct snd_soc_codec *codec)
 
 	if (ret)
 		tapan_cleanup_irqs(tapan);
+
+
+#ifdef CONFIG_SOUND_CONTROL_HAX_3_GPL
+	apply_preset(5, 3, 1, 253, 2);
+#endif
 
 	return ret;
 

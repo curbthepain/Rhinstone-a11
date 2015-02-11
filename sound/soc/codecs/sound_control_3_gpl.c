@@ -431,6 +431,46 @@ static struct attribute_group sound_control_attr_group =
 
 static struct kobject *sound_control_kobj;
 
+void apply_preset(unsigned int cam_mic_gain, unsigned int mic_gain, unsigned int spk_gain, unsigned int hp_gain, unsigned int hp_pa_gain)
+{
+	unsigned int out = 0;
+	unsigned int gain = 0;
+	unsigned int status = 0;
+	//cam_mic_gain
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_TX3_VOL_CTL_GAIN, cam_mic_gain);
+	//mic_gain
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_TX4_VOL_CTL_GAIN, mic_gain);
+	//speaker_gain
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_RX3_VOL_CTL_B2_CTL, spk_gain);
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_RX4_VOL_CTL_B2_CTL, spk_gain);
+	//headphone_gain
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_RX1_VOL_CTL_B2_CTL, hp_gain);
+	tapan_write(fauxsound_codec_ptr,
+		TAPAN_A_CDC_RX2_VOL_CTL_B2_CTL, hp_gain);
+	//headphone_pa_gain
+	gain = tapan_read(fauxsound_codec_ptr, TAPAN_A_RX_HPH_L_GAIN);
+	out = (gain & 0xf0) | hp_pa_gain;
+	tapan_write(fauxsound_codec_ptr, TAPAN_A_RX_HPH_L_GAIN, out);
+
+	status = tapan_read(fauxsound_codec_ptr, TAPAN_A_RX_HPH_L_STATUS);
+	out = (status & 0x0f) | (hp_pa_gain << 4);
+	tapan_write(fauxsound_codec_ptr, TAPAN_A_RX_HPH_L_STATUS, out);
+
+	gain = tapan_read(fauxsound_codec_ptr, TAPAN_A_RX_HPH_R_GAIN);
+	out = (gain & 0xf0) | hp_pa_gain;
+	tapan_write(fauxsound_codec_ptr, TAPAN_A_RX_HPH_R_GAIN, out);
+
+	status = tapan_read(fauxsound_codec_ptr, TAPAN_A_RX_HPH_R_STATUS);
+	out = (status & 0x0f) | (hp_pa_gain << 4);
+	tapan_write(fauxsound_codec_ptr, TAPAN_A_RX_HPH_R_STATUS, out);
+}
+EXPORT_SYMBOL(apply_preset);
+
 static int sound_control_init(void)
 {
 	int sysfs_result;
