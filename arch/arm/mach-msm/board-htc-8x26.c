@@ -84,7 +84,7 @@
 #include <asm/setup.h>
 #endif
 #define HTC_8226_PERSISTENT_RAM_PHYS 0x05B00000
-#define HTC_8226_PERSISTENT_RAM_SIZE (SZ_1M - SZ_128K)
+#define HTC_8226_PERSISTENT_RAM_SIZE (SZ_1M)
 #define HTC_8226_RAM_CONSOLE_SIZE    HTC_8226_PERSISTENT_RAM_SIZE
 
 extern int __init htc_8226_dsi_panel_power_register(void);
@@ -165,11 +165,7 @@ static void __init htc_8226_reserve(void)
 	of_scan_flat_dt(dt_scan_for_memory_reserve, htc_8226_reserve_table);
 	msm_reserve();
 }
-#ifdef CONFIG_MACH_DUMMY
-#define HTC_8x26_USB1_HS_ID_GPIO 54
-#else
 #define HTC_8x26_USB1_HS_ID_GPIO 1
-#endif
 
 static int64_t htc_8x26_get_usbid_adc(void)
 {
@@ -312,9 +308,6 @@ static struct android_usb_platform_data android_usb_pdata = {
 	.usb_rmnet_interface = "smd,bam",
 	.usb_diag_interface = "diag",
 	.fserial_init_string = "smd:modem,tty,tty:autobot,tty:serial,tty:autobot,tty:acm",
-#ifdef CONFIG_MACH_DUMMY
-	.match = memwl_usb_product_id_match,
-#endif
 	.nluns = 1,
 	.cdrom_lun = 0x1,
 	.vzw_unmount_cdrom = 0,
@@ -346,21 +339,6 @@ static void msm8226_add_usb_devices(void)
 
 	
 	android_usb_pdata.serial_number = board_serialno();
-#ifdef CONFIG_MACH_DUMMY
-	android_usb_pdata.product_id 	= 0x0629;
-#elif defined(CONFIG_MACH_DUMMY)
-	android_usb_pdata.product_id 	= 0x060c;
-	android_usb_pdata.vzw_unmount_cdrom = 1;
-	android_usb_pdata.nluns = 2;
-        android_usb_pdata.cdrom_lun = 0x3;
-#elif defined(CONFIG_MACH_DUMMY)
-	android_usb_pdata.product_id 	= 0x063d;
-#elif defined(CONFIG_MACH_DUMMY)
-	android_usb_pdata.product_id 	= 0x063e;
-	android_usb_pdata.vzw_unmount_cdrom = 1;
-#elif defined(CONFIG_MACH_DUMMY)
-	android_usb_pdata.product_id 	= 0x0647;
-#else
 	id = of_machine_projectid(0);
 	switch (id) {
 		case 297: 
@@ -398,7 +376,6 @@ static void msm8226_add_usb_devices(void)
 			android_usb_pdata.product_id 	= 0x0dff;
 			break;
 	}
-#endif
 	platform_device_register(&android_usb_device);
 }
 
